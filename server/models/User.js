@@ -17,12 +17,12 @@ const UserSchema = new mongoose.Schema({
     },
     resetToken: { 
         type: String, 
-        default: null // Token for password reset
+        default: null 
     },
     resetTokenExpiry: { 
         type: Date, 
-        default: null // Expiry for the reset token
+        default: null 
     },
-}, { timestamps: true }); // Automatically adds `createdAt` and `updatedAt` fields
+}, { timestamps: true }); 
 
 module.exports = mongoose.model('User', UserSchema);

@@ -3,6 +3,8 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const nodemailer = require('nodemailer');
 const crypto= require('crypto');
+const dotenv = require("dotenv");
+dotenv.config();
 
 // User Registration
 exports.registerUser = async (req, res) => {
@@ -53,6 +55,11 @@ exports.loginUser = async (req, res) => {
 
 // Forget Password
 exports.forgetPassword = async (req, res) => {
+    console.log("EMAIL_USER:", process.env.EMAIL_USER);
+    console.log("EMAIL_PASSWORD:", process.env.EMAIL_PASSWORD);
+    console.log("EMAIL_SERVICE:", process.env.EMAIL_SERVICE);
+    
+
     const { email } = req.body;
     if (!email) {
         return res.status(400).json({ error: 'Email is required' });
@@ -64,33 +71,34 @@ exports.forgetPassword = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Generate a reset token (using crypto)
+        
         const resetToken = crypto.randomBytes(32).toString('hex');
         user.resetToken = resetToken;
-        user.resetTokenExpiry = Date.now() + 3600000;  // Token expires in 1 hour
+        user.resetTokenExpiry = Date.now() + 3600000;  
         await user.save();
 
-        // Set up the email transporter using Nodemailer
+        
         const transporter = nodemailer.createTransport({
-            service: 'gmail',  // You can use other services as well
+            service: process.env.EMAIL_SERVICE,  
             auth: {
-                user: 'prathamesh.223414101@vcet.edu.in',  // Replace with your Gmail address
-                pass: '#dpmishra=1+vcet'    // Replace with your Gmail password
+                user: process.env.EMAIL_USER,  
+                pass: process.env.EMAIL_PASSWORD    
             }
         });
 
-        // Email options
+        
         const mailOptions = {
-            from: 'prathamesh.223414101@vcet.edu.in',  // Replace with your email address
+            from: process.env.EMAIL_USER,  
             to: email,
             subject: 'Password Reset Request',
             text: `To reset your password, click the following link or paste it into your browser:\n\nhttp://localhost:5000/api/users/reset-password?token=${resetToken}\n\nIf you did not request a password reset, please ignore this email.`
         };
 
-        // Send email
+        
         transporter.sendMail(mailOptions, (error, info) => {
             if (error) {
                 return res.status(500).json({ error: 'Error sending email' });
+                
             }
             res.status(200).json({ message: 'Reset password link sent to email' });
         });
@@ -108,21 +116,21 @@ exports.resetPassword = async (req, res) => {
     }
 
     try {
-        // Find the user with the matching reset token and check expiry
+        
         const user = await User.findOne({
             resetToken: token,
-            resetTokenExpiry: { $gt: Date.now() }  // Ensure token hasn't expired
+            resetTokenExpiry: { $gt: Date.now() }  
         });
 
         if (!user) {
             return res.status(400).json({ error: 'Invalid or expired reset token' });
         }
 
-        // Hash the new password using bcrypt before updating it
+        
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         user.password = hashedPassword;
-        user.resetToken = undefined;  // Clear reset token after use
-        user.resetTokenExpiry = undefined;  // Clear expiry after use
+        user.resetToken = undefined;  
+        user.resetTokenExpiry = undefined;  
         await user.save();
 
         res.status(200).json({ message: 'Password reset successfully' });
