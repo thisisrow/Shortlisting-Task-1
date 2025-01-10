@@ -16,7 +16,9 @@ connectDB();
 app.use(morgan("dev"));
 // Routes
 app.use('/api/users', userRoutes);
-
+app.get('/', (req, res) => {
+    res.send("hello world");
+});
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
