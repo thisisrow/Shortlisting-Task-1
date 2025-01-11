@@ -55,11 +55,6 @@ exports.loginUser = async (req, res) => {
 
 // Forget Password
 exports.forgetPassword = async (req, res) => {
-    console.log("EMAIL_USER:", process.env.EMAIL_USER);
-    console.log("EMAIL_PASSWORD:", process.env.EMAIL_PASSWORD);
-    console.log("EMAIL_SERVICE:", process.env.EMAIL_SERVICE);
-    
-
     const { email } = req.body;
     if (!email) {
         return res.status(400).json({ error: 'Email is required' });
