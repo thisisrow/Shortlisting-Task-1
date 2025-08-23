@@ -76,14 +76,14 @@ exports.forgetPassword = async (req, res) => {
         const transporter = nodemailer.createTransport({
             service: process.env.EMAIL_SERVICE,  
             auth: {
-                user: "prathamesh.223414101@vcet.edu.in",  
-                pass: "#dpmishra=1+vcet"    
+                user: process.env.EMAIL_USER,  
+                pass: process.env.EMAIL_PASSWORD    
             }
         });
 
         
         const mailOptions = {
-            from: "prathamesh.223414101@vcet.edu.in",  
+            from: process.env.EMAIL_USER,  
             to: email,
             subject: 'Password Reset Request',
             text: `To reset your password, click the following link or paste it into your browser:\n\nhttp://localhost:5000/api/users/reset-password?token=${resetToken}\n\nIf you did not request a password reset, please ignore this email.`
