@@ -40,12 +40,21 @@ exports.loginUser = async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
+
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
+
         const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '3m' });
-        res.status(200).json({ token });
+
+        // Exclude password and other sensitive fields before returning user
+        const { password: _, resetToken, resetTokenExpiry, ...userData } = user.toObject();
+
+        res.status(200).json({
+            token,
+            user: userData
+        });
     } catch (error) {
         res.status(500).json({ error: 'Error logging in user' });
     }
@@ -66,22 +75,21 @@ exports.forgetPassword = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        
         const resetToken = crypto.randomBytes(32).toString('hex');
         user.resetToken = resetToken;
         user.resetTokenExpiry = Date.now() + 3600000;  
         await user.save();
 
-        
         const transporter = nodemailer.createTransport({
-            service: process.env.EMAIL_SERVICE,  
+            host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+            port: process.env.EMAIL_PORT ? parseInt(process.env.EMAIL_PORT) : 465,
+            secure: true,
             auth: {
                 user: process.env.EMAIL_USER,  
                 pass: process.env.EMAIL_PASSWORD    
             }
         });
 
-        
         const mailOptions = {
             from: process.env.EMAIL_USER,  
             to: email,
@@ -89,16 +97,10 @@ exports.forgetPassword = async (req, res) => {
             text: `To reset your password, click the following link or paste it into your browser:\n\nhttp://localhost:5000/api/users/reset-password?token=${resetToken}\n\nIf you did not request a password reset, please ignore this email.`
         };
 
-        
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                return res.status(500).json({ error: 'Error sending email' });
-                
-            }
-            res.status(200).json({ message: 'Reset password link sent to email' });
-        });
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({ message: 'Reset password link sent to email' });
     } catch (error) {
-        res.status(500).json({ error: 'Error handling forgot password request' });
+        res.status(500).json({ error: error.message || 'Error handling forgot password request' });
     }
 };
 
