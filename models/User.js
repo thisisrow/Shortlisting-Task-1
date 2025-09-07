@@ -15,6 +15,15 @@ const UserSchema = new mongoose.Schema({
         type: String, 
         required: true 
     },
+    insta_username: { 
+        type: String, 
+        required: true, 
+        unique: true 
+    },
+    conpany_info:{
+        type:String,
+        required:false
+    },
     resetToken: { 
         type: String, 
         default: null 

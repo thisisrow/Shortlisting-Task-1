@@ -1,8 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const nodemailer = require('nodemailer');
-const crypto= require('crypto');
 const dotenv = require("dotenv");
 dotenv.config();
 
@@ -60,5 +58,39 @@ exports.loginUser = async (req, res) => {
     }
 };
 
+
+// Store Instagram username for a user
+exports.storeInstaUsername = async (req, res) => {
+    const { insta_username } = req.body;
+    const userId = req.user.id; // Get ID from authenticated user
+
+    if (!insta_username) {
+        return res.status(400).json({ error: "Instagram username is required" });
+    }
+
+    try {
+        const existingUser = await User.findById(userId);
+        if (!existingUser) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        existingUser.insta_username = insta_username;
+        await existingUser.save();
+
+        res.status(200).json({ 
+            message: "Instagram username stored successfully",
+            user: {
+                id: existingUser._id,
+                insta_username: existingUser.insta_username
+            }
+        });
+    } catch (error) {
+        console.error("Error storing insta username:", error);
+        if (error.name === 'CastError') {
+            return res.status(400).json({ error: "Invalid user ID format" });
+        }
+        res.status(500).json({ error: "Error in storing Instagram username" });
+    }
+};
 
 
