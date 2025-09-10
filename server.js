@@ -29,7 +29,7 @@ app.get('/', (req, res) => {
 
 // Replace with the user’s long-lived access token (store securely in DB)
 const ACCESS_TOKEN = "IGAARyPjOfdWNBZAE1qQVZAzWTk1UWFPUkV4MlVkZAWwzcXduZAE81MldaNm9MOU5nQ0hKRFpHUXRvZA1UwN09PVkxJYUV2TEhsdUlXSnRKcnhadHpUenFhYnlhUDJtUmFzV1U5Y3k5YmQ4YS1RTVVEc1B0cHk4cXlNanpOelQxZAkwzQQZDZD";
-const IG_USER_ID = "17841470351044288"; // Example: 17841470351044288
+const IG_USER_ID = "17841470351044288"; 
 
 
 // Fetch posts with comments
