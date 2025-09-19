@@ -17,10 +17,9 @@ const UserSchema = new mongoose.Schema({
     },
     insta_username: { 
         type: String, 
-        required: true, 
         unique: true 
     },
-    conpany_info:{
+    company_info:{
         type:String,
         required:false
     },
