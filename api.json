@@ -51,10 +51,75 @@
       }
     },
     {
-      "path": "/api/users",
-      "method": "various",
-      "description": "Base path for user-related routes (e.g., registration, login, profile management). Specific endpoints are defined in '/routes/userroutes.js'.",
-      "details": "The file '/routes/userroutes.js' was not provided, so specific endpoints under this path cannot be detailed."
+      "path": "/api/users/register",
+      "method": "POST",
+      "description": "Registers a new user.",
+      "request": {
+        "body": {
+          "email": "string",
+          "password": "string"
+        }
+      },
+      "response": {
+        "success": {
+          "status": 201,
+          "body": {
+            "success": true,
+            "token": "string (JWT)"
+          }
+        },
+        "error": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": "Error message (e.g., 'User already exists')."
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/users/login",
+      "method": "POST",
+      "description": "Authenticates a user and returns a token.",
+      "request": {
+        "body": {
+          "email": "string",
+          "password": "string"
+        }
+      },
+      "response": {
+        "success": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "token": "string (JWT)"
+          }
+        },
+        "error": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": "Error message (e.g., 'Invalid credentials')."
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/users/username",
+      "method": "POST",
+      "description": "Stores an Instagram username for the user. (Note: Authentication middleware is currently commented out in the source).",
+      "request": {
+        "body": {
+          "username": "string"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "message": "Username stored successfully."
+        }
+      }
     }
   ]
 }
