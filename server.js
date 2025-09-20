@@ -18,7 +18,7 @@ const ACCESS_TOKEN = "IGAARyPjOfdWNBZAE1qQVZAzWTk1UWFPUkV4MlVkZAWwzcXduZAE81Mlda
 const IG_USER_ID   = "17841470351044288";
 
 // Set these two from your Meta app for webhook verification/signature
-const IG_VERIFY_TOKEN = "IGAARyPjOfdWNBZAE1qQVZAzWTk1UWFPUkV4MlVkZAWwzcXduZAE81MldaNm9MOU5nQ0hKRFpHUXRvZA1UwN09PVkxJYUV2TEhsdUlXSnRKcnhadHpUenFhYnlhUDJtUmFzV1U5Y3k5YmQ4YS1RTVVEc1B0cHk4cXlNanpOelQxZAkwzQQZDZD";  // put the same in the Webhooks dashboard
+const IG_VERIFY_TOKEN = "kjabkjaBsoiaNIABIXIUABBXAVFGFGWEGFWGFWEGFGDD";  // put the same in the Webhooks dashboard
 const APP_SECRET      = "c0f05657a7ed375ed614576e9c467fd8";            // App Dashboard → Basic settings
 // ==============================================================================
 
@@ -160,6 +160,4 @@ io.on('connection', (socket) => {
 // Start
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-  console.log('Webhook GET:', 'https://<your-public-https>/webhooks/instagram');
-  console.log('Webhook POST:', 'https://<your-public-https>/webhooks/instagram');
 });
