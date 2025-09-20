@@ -1,4 +1,3 @@
-// routes/instagramRoutes.js
 const express = require('express');
 const axios = require('axios');
 
@@ -10,24 +9,27 @@ const {
   FB_REDIRECT_URI,
   GRAPH_VERSION = 'v19.0',
 } = process.env;
-console.log('FB_APP_ID:', FB_APP_ID);
+
 const GRAPH = (path) => `https://graph.facebook.com/${GRAPH_VERSION}${path}`;
 
-// ---- Demo token store (replace with DB in production) ----
+// Simple in-memory token store — replace with DB in production
 let TOKENS = {
-  userAccessToken: null,
-  pageAccessToken: null,
-  pageId: null,
-  igUserId: null,
+  userAccessToken: null,  // long-lived user token
+  igUserId: null,         // Instagram professional account id
+  username: null,         // Instagram username
 };
 
-// 1) Start OAuth: redirect user to Facebook Login (Business)
-router.get('/login', (req, res) => {
+/**
+ * 1) Start OAuth with Instagram Login (new scopes)
+ * Doc: Instagram API with Instagram Login
+ */
+router.get('/login', (_req, res) => {
   const scopes = [
-    'pages_show_list',
-    'pages_read_engagement',
-    'instagram_basic',
-    'instagram_manage_comments',
+    'instagram_business_basic',
+    'instagram_business_manage_comments',
+    // add only if you need them:
+    // 'instagram_business_content_publish',
+    // 'instagram_business_manage_messages',
   ].join(',');
 
   const url =
@@ -40,74 +42,60 @@ router.get('/login', (req, res) => {
   res.redirect(url);
 });
 
-// 2) OAuth callback -> exchange code for a **User Access Token**
+/**
+ * 2) OAuth callback → exchange code for user token,
+ *    upgrade to long-lived, then get IG user id from /me
+ * Docs: Access tokens (long-lived) + Instagram Login get-started (/me fields)
+ */
 router.get('/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.status(400).send('Missing code');
 
   try {
-    // Exchange code for short-lived user token
-    const tokenResp = await axios.get(
-      GRAPH('/oauth/access_token'),
-      {
-        params: {
-          client_id: FB_APP_ID,
-          client_secret: FB_APP_SECRET,
-          redirect_uri: FB_REDIRECT_URI,
-          code,
-        },
-      }
-    );
+    // Short-lived user token
+    const tokenResp = await axios.get(GRAPH('/oauth/access_token'), {
+      params: {
+        client_id: FB_APP_ID,
+        client_secret: FB_APP_SECRET,
+        redirect_uri: FB_REDIRECT_URI,
+        code,
+      },
+    });
+    const shortLived = tokenResp.data.access_token;
 
-    const userAccessToken = tokenResp.data.access_token;
-
-    // (Optional) Exchange for a long-lived user token
-    const longResp = await axios.get(
-      GRAPH('/oauth/access_token'),
-      {
-        params: {
-          grant_type: 'fb_exchange_token',
-          client_id: FB_APP_ID,
-          client_secret: FB_APP_SECRET,
-          fb_exchange_token: userAccessToken,
-        },
-      }
-    );
+    // Exchange for long-lived user token (~60d)
+    const longResp = await axios.get(GRAPH('/oauth/access_token'), {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: FB_APP_ID,
+        client_secret: FB_APP_SECRET,
+        fb_exchange_token: shortLived,
+      },
+    });
 
     TOKENS.userAccessToken = longResp.data.access_token;
 
-    // 3) Get Pages the user manages
-    const pagesResp = await axios.get(
-      GRAPH('/me/accounts'),
-      { params: { access_token: TOKENS.userAccessToken } }
-    );
+    // Get IG professional account id + username directly from /me
+    const meResp = await axios.get(GRAPH('/me'), {
+      params: {
+        fields: 'instagram_user_id,username',
+        access_token: TOKENS.userAccessToken,
+      },
+    });
 
-    // Choose a page. In real apps let the user choose; here we pick the first with an IG account.
-    let chosenPage = null;
-    for (const p of pagesResp.data.data) {
-      // look up whether it has an IG account
-      const pageDetail = await axios.get(
-        GRAPH(`/${p.id}`),
-        { params: { fields: 'instagram_business_account', access_token: TOKENS.userAccessToken } }
-      );
-      if (pageDetail.data.instagram_business_account) {
-        chosenPage = { ...p, igBusiness: pageDetail.data.instagram_business_account };
-        break;
-      }
+    TOKENS.igUserId = meResp.data.instagram_user_id;
+    TOKENS.username = meResp.data.username;
+
+    if (!TOKENS.igUserId) {
+      return res
+        .status(400)
+        .send('No Instagram professional account found for this user.');
     }
 
-    if (!chosenPage) {
-      return res.status(400).send('No Facebook Page with linked Instagram Business/Creator account found.');
-    }
-
-    TOKENS.pageId = chosenPage.id;
-    TOKENS.pageAccessToken = chosenPage.access_token;
-    TOKENS.igUserId = chosenPage.igBusiness.id;
-
-    res.send({
-      message: 'Connected!',
-      pageId: TOKENS.pageId,
+    res.json({
+      message: 'Connected with Instagram Login',
       igUserId: TOKENS.igUserId,
+      username: TOKENS.username,
     });
   } catch (err) {
     console.error(err.response?.data || err.message);
@@ -115,32 +103,32 @@ router.get('/callback', async (req, res) => {
   }
 });
 
-// 4) Get IG media (posts/reels). Add fields you need.
-router.get('/media', async (req, res) => {
+/**
+ * 3) Get IG media (posts/reels)
+ * Doc: /{ig-user-id}/media
+ */
+router.get('/media', async (_req, res) => {
   try {
-    if (!TOKENS.igUserId || !TOKENS.pageAccessToken) {
+    if (!TOKENS.igUserId || !TOKENS.userAccessToken) {
       return res.status(400).send('Not connected. Visit /api/instagram/login first.');
     }
 
-    const mediaResp = await axios.get(
-      GRAPH(`/${TOKENS.igUserId}/media`),
-      {
-        params: {
-          fields: [
-            'id',
-            'caption',
-            'media_type',
-            'media_url',
-            'permalink',
-            'thumbnail_url',
-            'timestamp',
-            'like_count',
-            'comments_count',
-          ].join(','),
-          access_token: TOKENS.pageAccessToken,
-        },
-      }
-    );
+    const mediaResp = await axios.get(GRAPH(`/${TOKENS.igUserId}/media`), {
+      params: {
+        fields: [
+          'id',
+          'caption',
+          'media_type',
+          'media_url',
+          'permalink',
+          'thumbnail_url',
+          'timestamp',
+          'like_count',
+          'comments_count',
+        ].join(','),
+        access_token: TOKENS.userAccessToken,
+      },
+    });
 
     res.json(mediaResp.data);
   } catch (err) {
@@ -149,24 +137,24 @@ router.get('/media', async (req, res) => {
   }
 });
 
-// 5) Get comments for a specific media id
+/**
+ * 4) Get comments for a media id
+ * Doc: /{ig-media-id}/comments
+ */
 router.get('/media/:mediaId/comments', async (req, res) => {
   const { mediaId } = req.params;
   try {
-    if (!TOKENS.pageAccessToken) {
+    if (!TOKENS.userAccessToken) {
       return res.status(400).send('Not connected. Visit /api/instagram/login first.');
     }
 
-    const commentsResp = await axios.get(
-      GRAPH(`/${mediaId}/comments`),
-      {
-        params: {
-          fields: ['id', 'text', 'username', 'timestamp'].join(','),
-          // If you need nested replies: 'replies{id,text,username,timestamp}'
-          access_token: TOKENS.pageAccessToken,
-        },
-      }
-    );
+    const commentsResp = await axios.get(GRAPH(`/${mediaId}/comments`), {
+      params: {
+        fields: 'id,text,username,timestamp',
+        // to include replies: 'replies{id,text,username,timestamp}'
+        access_token: TOKENS.userAccessToken,
+      },
+    });
 
     res.json(commentsResp.data);
   } catch (err) {
