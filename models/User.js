@@ -24,6 +24,14 @@ const UserSchema = new mongoose.Schema({
         type:String,
         required:false
     },
+    ig_user_id: { 
+        type: String, 
+        default: null 
+    },
+    access_token: { 
+        type: Date, 
+        default: null 
+    },
     resetToken: { 
         type: String, 
         default: null 
