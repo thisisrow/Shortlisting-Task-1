@@ -6,126 +6,169 @@ const axios = require('axios');
 const crypto = require('crypto');
 const http = require('http');
 
-// ---- your modules (leave as-is) ----
 const userRoutes = require('./routes/userroutes');
 const connectDB = require('./connection/db');
 
-// ================== CONFIG (TEST ONLY – do NOT commit these) ==================
 const PORT = process.env.PORT || 5000;
 
 const ACCESS_TOKEN = "IGAARyPjOfdWNBZAE1qQVZAzWTk1UWFPUkV4MlVkZAWwzcXduZAE81MldaNm9MOU5nQ0hKRFpHUXRvZA1UwN09PVkxJYUV2TEhsdUlXSnRKcnhadHpUenFhYnlhUDJtUmFzV1U5Y3k5YmQ4YS1RTVVEc1B0cHk4cXlNanpOelQxZAkwzQQZDZD";
 const IG_USER_ID   = "17841470351044288";
-const IG_VERIFY_TOKEN = "kjabkjaBsoiaNIABIXIUABBXAVFGFGWEGFWGFWEGFGDD";   // must match dashboard
-const APP_SECRET      = "c0f05657a7ed375ed614576e9c467fd8";               // App Dashboard → app secret
-// ==============================================================================
+const IG_USERNAME  = "let.be.crazy"; // <-- set your IG username here
+const IG_VERIFY_TOKEN = "kjabkjaBsoiaNIABIXIUABBXAVFGFGWEGFWGFWEGFGDD";
+const APP_SECRET      = "c0f05657a7ed375ed614576e9c467fd8";
 
-// Express + HTTP server (for Socket.IO)
 const app = express();
 const server = http.createServer(app);
-
-// --- Socket.IO (optional live updates) ---
 const { Server } = require('socket.io');
 const io = new Server(server, { cors: { origin: '*' } });
 
-// ---- Core middleware (safe for webhook GET) ----
 app.use(cors());
 app.use(morgan('dev'));
 
-// ============== DEBUG: keep last few webhook payloads ==============
+// In-memory cache/index so we can update posts when webhooks arrive
 const RECENT_EVENTS = [];
+const POST_INDEX = new Map(); // postId -> post object shaped for frontend
 
-// ================== WEBHOOK ROUTES ==================
-// GET: verification handshake (no raw body here)
+// ===== Webhooks =====
 app.get('/webhooks/instagram', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-
   if (mode === 'subscribe' && token === IG_VERIFY_TOKEN && challenge) {
     return res.status(200).send(challenge);
   }
   return res.sendStatus(403);
 });
 
-// POST: actual events (use raw for signature verification)
-app.post(
-  '/webhooks/instagram',
-  express.raw({ type: '*/*' }),
-  async (req, res) => {
-    // ACK quickly so Meta doesn't retry
-    res.sendStatus(200);
+app.post('/webhooks/instagram', express.raw({ type: '*/*' }), async (req, res) => {
+  res.sendStatus(200);
 
-    // (temporarily comment next 3 lines if you need to debug delivery)
-    if (!isValidSignature(req)) {
-      console.warn('⚠️ Invalid X-Hub-Signature-256');
-      return;
-    }
+  // TEMP for debugging: comment next 3 lines if you need to confirm delivery
+  if (!isValidSignature(req)) {
+    console.warn('⚠️ Invalid X-Hub-Signature-256'); return;
+  }
 
-    let payload;
-    try { payload = JSON.parse(req.body.toString()); }
-    catch (e) { console.error('Webhook JSON parse error:', e.message); return; }
+  let payload;
+  try { payload = JSON.parse(req.body.toString()); }
+  catch (e) { console.error('Webhook JSON parse error:', e.message); return; }
 
-    // keep a copy for /webhooks/_events viewer
-    RECENT_EVENTS.unshift({ receivedAt: new Date().toISOString(), payload });
-    RECENT_EVENTS.splice(50);
+  RECENT_EVENTS.unshift({ receivedAt: new Date().toISOString(), payload });
+  RECENT_EVENTS.splice(50);
 
-    // Expected payload: { object:"instagram", entry:[{ changes:[{ field, value }], ... }] }
-    for (const entry of payload.entry ?? []) {
-      for (const change of entry.changes ?? []) {
-        if (change.field === 'comments') {
-          const { id: commentId, verb } = change.value || {};
-          if (!commentId) continue;
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      if (change.field === 'comments') {
+        const { id: commentId, verb, media_id } = change.value || {};
+        if (!commentId) continue;
+        try {
+          // Fetch full comment + the media it belongs to
+          const url = `https://graph.facebook.com/v20.0/${commentId}?fields=id,text,username,timestamp,media&access_token=${ACCESS_TOKEN}`;
+          const { data: c } = await axios.get(url);
 
-          try {
-            // Fetch full comment details
-            const url = `https://graph.facebook.com/v20.0/${commentId}?fields=id,text,username,timestamp,media&access_token=${ACCESS_TOKEN}`;
-            const { data } = await axios.get(url);
-
-            // broadcast to any connected clients
-            io.emit('ig:new_comment', { verb, ...data });
-            console.log('💬 IG comment event:', { verb, ...data });
-          } catch (e) {
-            console.error('Fetch comment failed:', e.response?.data || e.message);
+          // Merge into our index if we already have the post
+          const postId = (c.media && c.media.id) || media_id;
+          if (postId && POST_INDEX.has(postId)) {
+            const post = POST_INDEX.get(postId);
+            const newComment = {
+              id: c.id,
+              text: c.text || '',
+              username: c.username || '',
+              timestamp: c.timestamp || new Date().toISOString(),
+              isMine: (c.username || '').toLowerCase() === IG_USERNAME.toLowerCase()
+            };
+            post.comments.unshift(newComment);
+            post.commentsCount = (post.commentsCount || 0) + (verb === 'remove' ? 0 : 1);
+            POST_INDEX.set(postId, post);
+            io.emit('ig:new_comment', { postId, comment: newComment, verb: verb || 'add' });
+          } else {
+            // If we don't have the post cached yet, just broadcast the bare comment
+            io.emit('ig:new_comment', { postId, comment: { id: c.id, text: c.text, username: c.username, timestamp: c.timestamp }, verb: verb || 'add' });
           }
+
+          console.log('💬 IG comment event:', { postId, id: c.id, text: c.text, by: c.username, verb: verb || 'add' });
+        } catch (e) {
+          console.error('Fetch comment failed:', e.response?.data || e.message);
         }
       }
     }
   }
-);
+});
 
-// helper to verify X-Hub-Signature-256
 function isValidSignature(req) {
   try {
-    const signatureHeader = req.headers['x-hub-signature-256']; // "sha256=..."
+    const signatureHeader = req.headers['x-hub-signature-256'];
     if (!signatureHeader || !APP_SECRET) return false;
-
     const hmac = crypto.createHmac('sha256', APP_SECRET);
-    hmac.update(req.body); // Buffer (raw)
+    hmac.update(req.body);
     const expected = `sha256=${hmac.digest('hex')}`;
-
-    // timing-safe compare
     return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
-// ================== END WEBHOOK ==================
 
-// After webhook routes, normal JSON parsing is safe
+// After webhook routes
 app.use(express.json());
 
-// ---- DB + routes (your existing code) ----
 connectDB();
 app.use('/api/users', userRoutes);
 
-// Health
 app.get('/', (req, res) => res.send('hello world'));
 
-// ===== Debug endpoints (so you can SEE data quickly) =====
-app.get('/webhooks/_events', (req, res) => {
-  res.json({ count: RECENT_EVENTS.length, items: RECENT_EVENTS });
+// Inspect raw webhook payloads
+app.get('/webhooks/_events', (req, res) => res.json({ count: RECENT_EVENTS.length, items: RECENT_EVENTS }));
+
+// === REST: posts (enriched) ===
+app.get('/posts', async (req, res) => {
+  try {
+    const fields = "id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count";
+    const url = `https://graph.instagram.com/${IG_USER_ID}/media?fields=${fields}&access_token=${ACCESS_TOKEN}`;
+    const { data: list } = await axios.get(url);
+    const posts = list.data || [];
+
+    const postsWithComments = await Promise.all(
+      posts.map(async (p) => {
+        let comments = [];
+        try {
+          const cu = `https://graph.instagram.com/${p.id}/comments?fields=id,text,username,timestamp&access_token=${ACCESS_TOKEN}`;
+          const { data: cRes } = await axios.get(cu);
+          comments = (cRes.data || []).map(c => ({
+            id: c.id,
+            text: c.text || '',
+            username: c.username || '',
+            timestamp: c.timestamp || '',
+            isMine: (c.username || '').toLowerCase() === IG_USERNAME.toLowerCase()
+          })).sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''));
+        } catch (_) { comments = []; }
+
+        const shaped = {
+          id: p.id,
+          caption: p.caption || '',
+          mediaType: p.media_type,
+          imageUrl: p.media_url,
+          permalink: p.permalink,
+          timestamp: p.timestamp,
+          likes: p.like_count ?? 0,
+          commentsCount: p.comments_count ?? comments.length,
+          comments
+        };
+
+        // update index for live merging
+        POST_INDEX.set(p.id, shaped);
+        return shaped;
+      })
+    );
+
+    res.json({ success: true, data: postsWithComments });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
 });
 
+// A frontend-friendly flat list (same as we cache)
+app.get('/posts/flat', (req, res) => {
+  res.json({ success: true, data: Array.from(POST_INDEX.values()) });
+});
+
+// Live viewer
 app.get('/debug', (req, res) => {
   res.type('html').send(`
     <!doctype html><meta charset="utf-8">
@@ -135,51 +178,21 @@ app.get('/debug', (req, res) => {
     <script>
       const socket = io(location.origin, { transports: ['websocket'] });
       const ul = document.getElementById('list');
-      socket.on('ig:new_comment', c => {
+      socket.on('ig:new_comment', e => {
         const li = document.createElement('li');
-        li.textContent = '[' + (c.timestamp || new Date().toISOString()) + '] @' + (c.username||'') + ': ' + (c.text||JSON.stringify(c));
+        const c = e.comment || {};
+        li.textContent = 'post ' + (e.postId||'?') + ' — @' + (c.username||'') + ': ' + (c.text||'') + ' (' + (e.verb||'add') + ')';
         ul.prepend(li);
       });
     </script>
   `);
 });
 
-// ================== Your existing polling endpoint ==================
-app.get('/posts', async (req, res) => {
-  try {
-    const fields = "id,caption,media_type,media_url,permalink,timestamp";
-    const url = `https://graph.instagram.com/${IG_USER_ID}/media?fields=${fields}&access_token=${ACCESS_TOKEN}`;
-    const response = await axios.get(url);
-    const posts = response.data.data || [];
-
-    const postsWithComments = await Promise.all(
-      posts.map(async (post) => {
-        try {
-          const commentsUrl = `https://graph.instagram.com/${post.id}/comments?fields=id,text,username,timestamp&access_token=${ACCESS_TOKEN}`;
-          const commentsRes = await axios.get(commentsUrl);
-          return { ...post, comments: commentsRes.data.data || [] };
-        } catch {
-          return { ...post, comments: [] };
-        }
-      })
-    );
-
-    res.json({ success: true, data: postsWithComments });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message,
-    });
-  }
-});
-
-// --- Socket.IO logs (optional)
 io.on('connection', (socket) => {
   console.log('🔌 Client connected:', socket.id);
   socket.on('disconnect', () => console.log('🔌 Client disconnected:', socket.id));
 });
 
-// Start
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log('Server is running on port', PORT);
 });
