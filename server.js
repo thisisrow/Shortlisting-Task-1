@@ -9,10 +9,6 @@ const connectDB = require('./connection/db');
 
 // ================== CONFIG (TEST ONLY – do NOT commit these) ==================
 const PORT = process.env.PORT || 5000;
-
-// NOTE: Your current token (starts with IGA...) is a Basic Display token.
-// It will NOT work for Graph enrichment calls. This code emits from raw webhook,
-// and uses polling endpoints that do work with Basic Display. For replying, switch to Graph token.
 const ACCESS_TOKEN = "IGAARyPjOfdWNBZAE1qQVZAzWTk1UWFPUkV4MlVkZAWwzcXduZAE81MldaNm9MOU5nQ0hKRFpHUXRvZA1UwN09PVkxJYUV2TEhsdUlXSnRKcnhadHpUenFhYnlhUDJtUmFzV1U5Y3k5YmQ4YS1RTVVEc1B0cHk4cXlNanpOelQxZAkwzQQZDZD";
 const IG_USER_ID   = "17841470351044288";
 const IG_USERNAME  = "let.be.crazy";
