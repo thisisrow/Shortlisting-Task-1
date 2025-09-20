@@ -17,20 +17,11 @@ const UserSchema = new mongoose.Schema({
     },
     insta_username: { 
         type: String, 
-        required: true, 
-        unique: false 
+        unique: true 
     },
-    conpany_info:{
+    company_info:{
         type:String,
         required:false
-    },
-    ig_user_id: { 
-        type: String, 
-        default: null 
-    },
-    access_token: { 
-        type: Date, 
-        default: null 
     },
     resetToken: { 
         type: String, 
