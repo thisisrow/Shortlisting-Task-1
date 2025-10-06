@@ -1,0 +1,125 @@
+{
+  "endpoints": [
+    {
+      "path": "/",
+      "method": "GET",
+      "description": "A simple welcome/health-check endpoint.",
+      "response": {
+        "type": "text/plain",
+        "example": "hello world"
+      }
+    },
+    {
+      "path": "/posts",
+      "method": "GET",
+      "description": "Fetches all media posts from the configured Instagram account, including details like likes, comments count, and the comments themselves. It interacts with the Instagram Graph API.",
+      "response": {
+        "success": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "data": [
+              {
+                "id": "string",
+                "caption": "string",
+                "mediaType": "string",
+                "imageUrl": "string",
+                "permalink": "string",
+                "timestamp": "string",
+                "likes": "number",
+                "commentsCount": "number",
+                "comments": [
+                  {
+                    "id": "string",
+                    "text": "string",
+                    "username": "string",
+                    "timestamp": "string",
+                    "isMine": "boolean"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "error": {
+          "status": 500,
+          "body": {
+            "success": false,
+            "error": "object or string containing error details from Instagram API or a message."
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/users/register",
+      "method": "POST",
+      "description": "Registers a new user.",
+      "request": {
+        "body": {
+          "email": "string",
+          "password": "string"
+        }
+      },
+      "response": {
+        "success": {
+          "status": 201,
+          "body": {
+            "success": true,
+            "token": "string (JWT)"
+          }
+        },
+        "error": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": "Error message (e.g., 'User already exists')."
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/users/login",
+      "method": "POST",
+      "description": "Authenticates a user and returns a token.",
+      "request": {
+        "body": {
+          "email": "string",
+          "password": "string"
+        }
+      },
+      "response": {
+        "success": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "token": "string (JWT)"
+          }
+        },
+        "error": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": "Error message (e.g., 'Invalid credentials')."
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/users/username",
+      "method": "POST",
+      "description": "Stores an Instagram username for the user. (Note: Authentication middleware is currently commented out in the source).",
+      "request": {
+        "body": {
+          "username": "string"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "message": "Username stored successfully."
+        }
+      }
+    }
+  ]
+}
